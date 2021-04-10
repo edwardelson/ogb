@@ -9,7 +9,7 @@ dataset/
 *.pt
 *.so
 *trial*
-*.ipynb
+# *.ipynb
 *.sh
 *analyze*
 *random.py
