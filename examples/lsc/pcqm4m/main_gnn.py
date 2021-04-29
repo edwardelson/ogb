@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import StepLR
 
-from gnn import GNN
+from gnn import GNN, BayesianGNN
 
 import os
 from tqdm import tqdm
@@ -20,7 +20,7 @@ from ogb.lsc import PygPCQM4MDataset, PCQM4MEvaluator
 
 reg_criterion = torch.nn.L1Loss()
 
-def train(model, device, loader, optimizer):
+def train(model, device, loader, optimizer, gnn_name):
     model.train()
     loss_accum = 0
 
@@ -30,6 +30,11 @@ def train(model, device, loader, optimizer):
         pred = model(batch).view(-1,)
         optimizer.zero_grad()
         loss = reg_criterion(pred, batch.y)
+
+        if gnn_name == 'gin-virtual-bnn':
+            kl_loss = model.get_kl_loss()[0]
+            loss += kl_loss
+
         loss.backward()
         optimizer.step()
 
@@ -150,6 +155,8 @@ def main():
         model = GNN(gnn_type = 'gcn', virtual_node = False, **shared_params).to(device)
     elif args.gnn == 'gcn-virtual':
         model = GNN(gnn_type = 'gcn', virtual_node = True, **shared_params).to(device)
+    elif args.gnn == 'gin-virtual-bnn':
+        model = BayesianGNN(gnn_type = 'gin', virtual_node = True, **shared_params).to(device)
     else:
         raise ValueError('Invalid GNN type')
 
@@ -172,7 +179,7 @@ def main():
     for epoch in range(1, args.epochs + 1):
         print("=====Epoch {}".format(epoch))
         print('Training...')
-        train_mae = train(model, device, train_loader, optimizer)
+        train_mae = train(model, device, train_loader, optimizer, args.gnn)
 
         print('Evaluating...')
         valid_mae = eval(model, device, valid_loader, evaluator)
