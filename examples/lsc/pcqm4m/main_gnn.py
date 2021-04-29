@@ -1,3 +1,6 @@
+### importing OGB-LSC
+from ogb.lsc import PygPCQM4MDataset, PCQM4MEvaluator
+
 import torch
 from torch_geometric.data import DataLoader
 import torch.optim as optim
@@ -15,8 +18,6 @@ import numpy as np
 import random
 
 
-### importing OGB-LSC
-from ogb.lsc import PygPCQM4MDataset, PCQM4MEvaluator
 
 reg_criterion = torch.nn.L1Loss()
 
