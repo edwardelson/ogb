@@ -4,7 +4,7 @@ from torch_geometric.nn import global_add_pool, global_mean_pool, global_max_poo
 import torch.nn.functional as F
 from torch_geometric.nn.inits import uniform
 
-from conv import GNN_node, GNN_node_Virtualnode
+from conv import GNN_node, GNN_node_Virtualnode, Bayesian_GNN_node_Virtualnode
 
 from torch_scatter import scatter_mean
 
@@ -75,6 +75,13 @@ class BayesianGNN(GNN):
         super(BayesianGNN, self).__init__(num_tasks, num_layers, emb_dim, 
                     gnn_type, virtual_node, residual, drop_ratio, JK, graph_pooling)
         
+        ### GNN to generate node embeddings
+        if virtual_node:
+            self.gnn_node = Bayesian_GNN_node_Virtualnode(num_layers, emb_dim, JK = JK, drop_ratio = drop_ratio, residual = residual, gnn_type = gnn_type)
+        else:
+            raise Exception("not implemented")
+
+
         # KL-divergence loss for Bayesian Neural Network
         self.kl_loss = bnn.BKLLoss(reduction='mean', last_layer_only=False)
         self.kl_weight = 0.01
