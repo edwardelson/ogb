@@ -21,16 +21,13 @@ class TripletLossRegression(nn.Module):
                 anchor: Tensor, negative: Tensor, positive: Tensor,
                 anchor_gt: Tensor, negative_gt: Tensor, positive_gt: Tensor) -> Tensor:
         anchor = global_add_pool(anchor, anchor_batch)
-        # print("Anchor embed dimensions: {}".format(anchor.size()))
 
         positive = global_add_pool(positive, positive_batch)
-        # print("Positive embed dimensions: {}".format(positive.size()))
 
         negative = global_add_pool(negative, negative_batch)
-        # print("Negative embed dimensions: {}".format(negative.size()))
 
-        pos_distance = torch.linalg.norm(positive - anchor, dim=(1, 2))
-        negative_distance = torch.linalg.norm(negative - anchor, dim=(1, 2))
+        pos_distance = torch.linalg.norm(positive - anchor, dim=1)
+        negative_distance = torch.linalg.norm(negative - anchor, dim=1)
 
         coeff = torch.div(torch.abs(negative_gt - anchor_gt) , (torch.abs(positive_gt - anchor_gt) + self.eps))
         loss = F.relu((pos_distance - coeff * negative_distance) + self.margin)
