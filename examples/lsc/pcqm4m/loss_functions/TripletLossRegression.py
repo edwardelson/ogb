@@ -1,0 +1,29 @@
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch import Tensor
+
+class TripletLossRegression(nn.Module):
+    """
+        anchor, positive, negative are node-level embeddings of a GNN before they are sent to a pooling layer,
+        and hence are expected to be matrices.
+        anchor_gt, positive_gt, and negative_gt are ground truth tensors that correspond to the ground-truth
+        values of the anchor, positive, and negative respectively.
+    """
+
+    def __init__(self, margin: float = 0.0, eps=1e-6):
+        super(TripletLossRegression, self).__init__()
+        self.margin = margin
+        self.eps = eps
+
+    def forward(self, anchor: Tensor, positive: Tensor, negative: Tensor,
+                anchor_gt: Tensor, positive_gt: Tensor, negative_gt: Tensor) -> Tensor:
+        pos_distance = torch.linalg.norm(positive - anchor, dim=(1, 2))
+        negative_distance = torch.linalg.norm(negative - anchor, dim=(1, 2))
+        coeff = torch.div(torch.abs(negative_gt - anchor_gt) , (torch.abs(positive_gt - anchor_gt) + self.eps))
+        loss = F.relu((pos_distance - coeff * negative_distance) + self.margin)
+        return torch.mean(loss)
+
+
+
+

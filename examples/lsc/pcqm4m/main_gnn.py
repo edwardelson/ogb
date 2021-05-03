@@ -3,7 +3,6 @@ from ogb.lsc import PygPCQM4MDataset, PCQM4MEvaluator
 import torch
 from torch_geometric.data import DataLoader
 import torch.optim as optim
-import torch.nn.functional as F
 from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import StepLR
 
@@ -12,14 +11,50 @@ from gnn import GNN, BayesianGNN
 import os
 from tqdm import tqdm
 import argparse
-import time
 import numpy as np
 import random
 
-import ogb
-
+from ogb.examples.lsc.pcqm4m.loss_functions.TripletLossRegression import TripletLossRegression
 
 reg_criterion = torch.nn.L1Loss()
+model_activation = {}
+def get_activation(name):
+    def hook(model, input, output):
+        model_activation[name] = output
+    return hook
+
+def triplet_loss_train(model, device, anchor_loader, negative_loader, positive_loader, optimizer, gnn_name):
+    model.train()
+    loss_accum = 0
+    triplet_loss_criterion = TripletLossRegression()
+
+    for step, (anchor_batch, negative_batch, positive_batch) in \
+            enumerate(tqdm(zip(anchor_loader, negative_loader, positive_loader), desc="Iteration")):
+        anchor_batch = anchor_batch.to(device)
+        negative_batch = negative_batch.to(device)
+        positive_batch = positive_batch.to(device)
+
+        anchor_batch_x, anchor_batch_y = anchor_batch.x, anchor_batch.y
+        positive_batch_x, positive_batch_y = positive_batch.x, positive_batch.y
+        negative_batch_x, negative_batch_y = negative_batch.x, negative_batch.y
+
+        pred_anchor = model(anchor_batch).view(-1,)
+        optimizer.zero_grad()
+        mae_loss = reg_criterion(pred_anchor, anchor_batch.y)
+        tll_loss = triplet_loss_criterion(anchor_batch_x, negative_batch_x, positive_batch_x,
+                                          anchor_batch_y, negative_batch_y, positive_batch_y)
+        loss = mae_loss + tll_loss
+
+        if gnn_name == 'gin-virtual-bnn':
+            kl_loss = model.get_kl_loss()[0]
+            loss += kl_loss
+
+        loss.backward()
+        optimizer.step()
+
+        loss_accum += loss.detach().cpu().item()
+
+    return loss_accum / (step + 1)
 
 def train(model, device, loader, optimizer, gnn_name):
     model.train()
@@ -105,6 +140,7 @@ def main():
                         help='number of workers (default: 0)')
     parser.add_argument('--log_dir', type=str, default="",
                         help='tensorboard log directory')
+    parser.add_argument('--use-triplet-loss_functions', action='store_true')
     parser.add_argument('--checkpoint_dir', type=str, default = '', help='directory to save checkpoint')
     parser.add_argument('--save_test_dir', type=str, default = '', help='directory to save test submission file')
     args = parser.parse_args()
@@ -130,6 +166,10 @@ def main():
         subset_ratio = 0.1
         subset_idx = torch.randperm(len(split_idx["train"]))[:int(subset_ratio*len(split_idx["train"]))]
         train_loader = DataLoader(dataset[split_idx["train"][subset_idx]], batch_size=args.batch_size, shuffle=True, num_workers = args.num_workers)
+    elif args.use_triplet_loss:
+        anchor_loader = DataLoader(dataset[split_idx["train"]], batch_size=args.batch_size, shuffle=True, num_workers = args.num_workers)
+        positive_loader = DataLoader(dataset[split_idx["train"]], batch_size=args.batch_size, shuffle=True, num_workers = args.num_workers)
+        negative_loader = DataLoader(dataset[split_idx["train"]], batch_size=args.batch_size, shuffle=True, num_workers = args.num_workers)
     else:
         train_loader = DataLoader(dataset[split_idx["train"]], batch_size=args.batch_size, shuffle=True, num_workers = args.num_workers)
 
@@ -177,10 +217,16 @@ def main():
     else:
         scheduler = StepLR(optimizer, step_size=30, gamma=0.25)
 
+    if args.use_triplet_loss:
+        model.gnn_node.register_forward_hook(get_activation('gnn_node'))
+
     for epoch in range(1, args.epochs + 1):
         print("=====Epoch {}".format(epoch))
         print('Training...')
-        train_mae = train(model, device, train_loader, optimizer, args.gnn)
+        if args.use_triplet_loss:
+            train_mae = triplet_loss_train(model, device, anchor_loader, negative_loader, positive_loader, optimizer, args.gnn)
+        else:
+            train_mae = train(model, device, train_loader, optimizer, args.gnn)
 
         print('Evaluating...')
         valid_mae = eval(model, device, valid_loader, evaluator)
