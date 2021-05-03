@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
+from torch_geometric.nn import global_add_pool
 
 class TripletLossRegression(nn.Module):
     """
@@ -16,14 +17,17 @@ class TripletLossRegression(nn.Module):
         self.margin = margin
         self.eps = eps
 
-    def forward(self, anchor: Tensor, positive: Tensor, negative: Tensor,
+    def forward(self, batch, anchor: Tensor, positive: Tensor, negative: Tensor,
                 anchor_gt: Tensor, positive_gt: Tensor, negative_gt: Tensor) -> Tensor:
+        anchor = global_add_pool(anchor, batch)
+        positive = global_add_pool(positive, batch)
+        negative = global_add_pool(negative, batch)
+
         pos_distance = torch.linalg.norm(positive - anchor, dim=(1, 2))
         negative_distance = torch.linalg.norm(negative - anchor, dim=(1, 2))
+
         coeff = torch.div(torch.abs(negative_gt - anchor_gt) , (torch.abs(positive_gt - anchor_gt) + self.eps))
         loss = F.relu((pos_distance - coeff * negative_distance) + self.margin)
         return torch.mean(loss)
-
-
 
 
