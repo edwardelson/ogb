@@ -14,7 +14,7 @@ import argparse
 import numpy as np
 import random
 
-from ogb.examples.lsc.pcqm4m.loss_functions.TripletLossRegression import TripletLossRegression
+from loss_functions.TripletLossRegression import TripletLossRegression
 
 reg_criterion = torch.nn.L1Loss()
 model_activation = {}
@@ -140,7 +140,7 @@ def main():
                         help='number of workers (default: 0)')
     parser.add_argument('--log_dir', type=str, default="",
                         help='tensorboard log directory')
-    parser.add_argument('--use-triplet-loss_functions', action='store_true')
+    parser.add_argument('--use_triplet_loss', action='store_true')
     parser.add_argument('--checkpoint_dir', type=str, default = '', help='directory to save checkpoint')
     parser.add_argument('--save_test_dir', type=str, default = '', help='directory to save test submission file')
     args = parser.parse_args()
