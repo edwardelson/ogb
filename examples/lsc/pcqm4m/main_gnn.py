@@ -1,4 +1,3 @@
-### importing OGB-LSC
 from ogb.lsc import PygPCQM4MDataset, PCQM4MEvaluator
 
 import torch
@@ -17,6 +16,7 @@ import time
 import numpy as np
 import random
 
+import ogb
 
 
 reg_criterion = torch.nn.L1Loss()
