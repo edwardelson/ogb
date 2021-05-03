@@ -31,18 +31,21 @@ def triplet_loss_train(model, device, anchor_loader, negative_loader, positive_l
     for step, (anchor_batch, negative_batch, positive_batch) in \
             enumerate(tqdm(zip(anchor_loader, negative_loader, positive_loader), desc="Iteration")):
         anchor_batch = anchor_batch.to(device)
-        negative_batch = negative_batch.to(device)
-        positive_batch = positive_batch.to(device)
-
-        anchor_batch_x, anchor_batch_y = anchor_batch.x, anchor_batch.y
-        positive_batch_x, positive_batch_y = positive_batch.x, positive_batch.y
-        negative_batch_x, negative_batch_y = negative_batch.x, negative_batch.y
-
         pred_anchor = model(anchor_batch).view(-1,)
+        anchor_embed = model_activation['gnn_node']
+
+        negative_batch = negative_batch.to(device)
+        pred_neg = model(negative_batch).view(-1,)
+        neg_embed = model_activation['gnn_node']
+
+        positive_batch = positive_batch.to(device)
+        pred_pos= model(positive_batch_batch).view(-1,)
+        pos_embed = model_activation['gnn_node']
+
         optimizer.zero_grad()
         mae_loss = reg_criterion(pred_anchor, anchor_batch.y)
-        tll_loss = triplet_loss_criterion(anchor_batch_x, negative_batch_x, positive_batch_x,
-                                          anchor_batch_y, negative_batch_y, positive_batch_y)
+        tll_loss = triplet_loss_criterion(anchor_embed, neg_embed, pos_embed,
+                                          anchor_batch.y, negative_batch.y, positive_batch.y)
         loss = mae_loss + tll_loss
 
         if gnn_name == 'gin-virtual-bnn':
