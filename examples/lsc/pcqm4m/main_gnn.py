@@ -32,15 +32,19 @@ def triplet_loss_train(model, device, anchor_loader, negative_loader, positive_l
             enumerate(tqdm(zip(anchor_loader, negative_loader, positive_loader), desc="Iteration")):
         anchor_batch = anchor_batch.to(device)
         pred_anchor = model(anchor_batch).view(-1,)
-        anchor_embed = model_activation['gnn_node']
+        anchor_embed = model_activation['pool']
+        print("Anchor embed dimensions: {}".format(anchor_embed.size()))
 
         negative_batch = negative_batch.to(device)
         pred_neg = model(negative_batch).view(-1,)
-        neg_embed = model_activation['gnn_node']
+        neg_embed = model_activation['pool']
+        print("Neg embed dimensions: {}".format(neg_embed.size()))
 
         positive_batch = positive_batch.to(device)
-        pred_pos= model(positive_batch_batch).view(-1,)
-        pos_embed = model_activation['gnn_node']
+        pred_pos= model(positive_batch).view(-1,)
+        pos_embed = model_activation['pool']
+        print("Pos embed dimensions: {}".format(pos_embed.size()))
+
 
         optimizer.zero_grad()
         mae_loss = reg_criterion(pred_anchor, anchor_batch.y)
@@ -221,7 +225,7 @@ def main():
         scheduler = StepLR(optimizer, step_size=30, gamma=0.25)
 
     if args.use_triplet_loss:
-        model.gnn_node.register_forward_hook(get_activation('gnn_node'))
+        model.pool.register_forward_hook(get_activation('pool'))
 
     for epoch in range(1, args.epochs + 1):
         print("=====Epoch {}".format(epoch))
