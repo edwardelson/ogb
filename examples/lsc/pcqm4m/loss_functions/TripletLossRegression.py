@@ -17,11 +17,17 @@ class TripletLossRegression(nn.Module):
         self.margin = margin
         self.eps = eps
 
-    def forward(self, batch, anchor: Tensor, positive: Tensor, negative: Tensor,
-                anchor_gt: Tensor, positive_gt: Tensor, negative_gt: Tensor) -> Tensor:
-        anchor = global_add_pool(anchor, batch)
-        positive = global_add_pool(positive, batch)
-        negative = global_add_pool(negative, batch)
+    def forward(self, anchor_batch, negative_batch, positive_batch,
+                anchor: Tensor, negative: Tensor, positive: Tensor,
+                anchor_gt: Tensor, negative_gt: Tensor, positive_gt: Tensor) -> Tensor:
+        anchor = global_add_pool(anchor, anchor_batch)
+        # print("Anchor embed dimensions: {}".format(anchor.size()))
+
+        positive = global_add_pool(positive, positive_batch)
+        # print("Positive embed dimensions: {}".format(positive.size()))
+
+        negative = global_add_pool(negative, negative_batch)
+        # print("Negative embed dimensions: {}".format(negative.size()))
 
         pos_distance = torch.linalg.norm(positive - anchor, dim=(1, 2))
         negative_distance = torch.linalg.norm(negative - anchor, dim=(1, 2))
