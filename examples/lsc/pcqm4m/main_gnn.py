@@ -29,7 +29,7 @@ def triplet_loss_train(model, device, anchor_loader, negative_loader, positive_l
     triplet_loss_criterion = TripletLossRegression()
 
     for step, (anchor_batch, negative_batch, positive_batch) in \
-            enumerate(tqdm(zip(anchor_loader, negative_loader, positive_loader), desc="Iteration")):
+            enumerate(zip(tqdm(anchor_loader, desc="Iteration"), negative_loader, positive_loader)):
         anchor_batch = anchor_batch.to(device)
         pred_anchor = model(anchor_batch).view(-1,)
         anchor_embed = model_activation['gnn_node']
