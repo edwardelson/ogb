@@ -1,3 +1,5 @@
+from ogb.lsc import DglPCQM4MDataset, PCQM4MEvaluator
+
 import argparse
 import dgl
 import numpy as np
@@ -5,7 +7,6 @@ import os
 import random
 import torch
 import torch.optim as optim
-from ogb.lsc import DglPCQM4MDataset, PCQM4MEvaluator
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import StepLR
