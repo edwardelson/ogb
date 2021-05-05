@@ -234,14 +234,14 @@ def main():
     checkpointFile = os.path.join(args.checkpoint_dir, 'checkpoint.pt')
     if os.path.exists(checkpointFile):
         # load checkpoint file
-        print("Loading existing weights from {}".format(checkpointFile))
         checkpointData = torch.load(checkpointFile)
         firstEpoch = checkpointData["epoch"]
         model.load_state_dict(checkpointData["model_state_dict"])
         optimizer.load_state_dict(checkpointData["optimizer_state_dict"])
         scheduler.load_state_dict(checkpointData["scheduler_state_dict"])
-        best_valid_mae = checkpointData["best_valid_mae"]
+        best_valid_mae = checkpointData["best_val_mae"]
         num_params = checkpointData["num_params"]
+        print("Loaded existing weights from {}. Continuing from epoch: {} with best valid MAE: {}".format(checkpointFile, firstEpoch, best_valid_mae))
 
     if args.use_triplet_loss:
         model.gnn_node.register_forward_hook(get_activation('gnn_node'))
