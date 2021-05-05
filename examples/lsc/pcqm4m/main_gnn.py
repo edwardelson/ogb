@@ -160,16 +160,7 @@ def main():
         model = BayesianGNN(gnn_type = 'gin', virtual_node = True, **shared_params).to(device)
     else:
         raise ValueError('Invalid GNN type')
-
-    # check if checkpoint exist -> load model
-    checkpointFile = os.path.join(args.checkpoint_dir, 'checkpoint.pt')
-    if os.path.exists(checkpointFile):
-        # load weights
-        print("Loading existing weights from {}".format(checkpointFile))
-        checkpointData = torch.load(checkpointFile)
-        model.load_state_dict(checkpointData["model_state_dict"])
-
-        
+       
     num_params = sum(p.numel() for p in model.parameters())
     print(f'#Params: {num_params}')
 
@@ -186,7 +177,23 @@ def main():
     else:
         scheduler = StepLR(optimizer, step_size=30, gamma=0.25)
 
-    for epoch in range(1, args.epochs + 1):
+    # start epoch (default = 1, unless resuming training)
+    firstEpoch = 1
+    # check if checkpoint exist -> load model
+    checkpointFile = os.path.join(args.checkpoint_dir, 'checkpoint.pt')
+    if os.path.exists(checkpointFile):
+        # load checkpoint file
+        print("Loading existing weights from {}".format(checkpointFile))
+        checkpointData = torch.load(checkpointFile)
+        firstEpoch = checkpointData["epoch"]
+        model.load_state_dict(checkpointData["model_state_dict"])
+        optimizer.load_state_dict(checkpointData["optimizer_state_dict"])
+        scheduler.load_state_dict(checkpointData["scheduler_state_dict"])
+        best_valid_mae = checkpointData["best_valid_mae"]
+        num_params = checkpointData["num_params"]
+
+
+    for epoch in range(firstEpoch, args.epochs + 1):
         print("=====Epoch {}".format(epoch))
         print('Training...')
         train_mae = train(model, device, train_loader, optimizer, args.gnn)
