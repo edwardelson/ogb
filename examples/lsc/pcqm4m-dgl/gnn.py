@@ -87,10 +87,7 @@ class DiffPoolGNN(GNN):
                  graph_pooling = "sum"):
         super(DiffPoolGNN, self).__init__(num_tasks, num_layers, emb_dim, gnn_type,
                  virtual_node, residual, drop_ratio, JK, graph_pooling)
-        
-        device = torch.device("cuda:" + str(args.device)) if torch.cuda.is_available() else torch.device("cpu")
-
-        
+               
         # 2x number of outputs
         self.graph_pred_linear = nn.Linear(2*self.emb_dim, self.num_tasks)
 #         self.graph_pred_linear = nn.Linear(self.emb_dim, self.num_tasks)
@@ -103,9 +100,9 @@ class DiffPoolGNN(GNN):
             dropout=0.0,
             aggregator_type="meanpool",
             link_pred=False
-        ).to(device)
+        ) #.to(device)
 
-        self.gc_after_pool = BatchedGraphSAGE(600, 600).to(device)
+        self.gc_after_pool = BatchedGraphSAGE(600, 600) #.to(device)
 
     def forward(self, g, x, edge_attr):
         # 1. GCN: 3628x9 -> 3628x600
