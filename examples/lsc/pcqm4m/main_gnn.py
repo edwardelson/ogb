@@ -14,7 +14,7 @@ import argparse
 import numpy as np
 import random
 
-from loss_functions.TripletLossRegression import TripletLossRegression
+from loss_functions.TripletLossRegression import TripletLossRegression, createTripletLoader
 
 reg_criterion = torch.nn.L1Loss()
 model_activation = {}
@@ -23,7 +23,10 @@ def get_activation(name):
         model_activation[name] = output
     return hook
 
-def triplet_loss_train(model, device, anchor_loader, negative_loader, positive_loader, optimizer, gnn_name):
+def triplet_loss_train(model, device, train_loader, dataset, optimizer, gnn_name, args):
+    model.eval()
+    anchor_loader, positive_loader, negative_loader = createTripletLoader(device, model, train_loader, dataset, args, errorThres=5)
+    
     model.train()
     loss_accum = 0
     triplet_loss_criterion = TripletLossRegression()
@@ -166,18 +169,19 @@ def main():
     ### automatic evaluator. takes dataset name as input
     evaluator = PCQM4MEvaluator()
 
-    if args.use_triplet_loss:
-        if args.train_subset:
-            subset_ratio = 0.1
-            subset_idx = torch.randperm(len(split_idx["train"]))[:int(subset_ratio*len(split_idx["train"]))]
-            anchor_loader = DataLoader(dataset[split_idx["train"][subset_idx]], batch_size=args.batch_size, shuffle=True, num_workers = args.num_workers)
-            positive_loader = DataLoader(dataset[split_idx["train"][subset_idx]], batch_size=args.batch_size, shuffle=True, num_workers = args.num_workers)
-            negative_loader = DataLoader(dataset[split_idx["train"][subset_idx]], batch_size=args.batch_size, shuffle=True, num_workers = args.num_workers)
-        else:
-            anchor_loader = DataLoader(dataset[split_idx["train"]], batch_size=args.batch_size, shuffle=True, num_workers = args.num_workers)
-            positive_loader = DataLoader(dataset[split_idx["train"]], batch_size=args.batch_size, shuffle=True, num_workers = args.num_workers)
-            negative_loader = DataLoader(dataset[split_idx["train"]], batch_size=args.batch_size, shuffle=True, num_workers = args.num_workers)
-    elif args.train_subset:
+#     if args.use_triplet_loss:
+#         if args.train_subset:
+#             subset_ratio = 0.1
+#             subset_idx = torch.randperm(len(split_idx["train"]))[:int(subset_ratio*len(split_idx["train"]))]
+#             anchor_loader = DataLoader(dataset[split_idx["train"][subset_idx]], batch_size=args.batch_size, shuffle=True, num_workers = args.num_workers)
+#             positive_loader = DataLoader(dataset[split_idx["train"][subset_idx]], batch_size=args.batch_size, shuffle=True, num_workers = args.num_workers)
+#             negative_loader = DataLoader(dataset[split_idx["train"][subset_idx]], batch_size=args.batch_size, shuffle=True, num_workers = args.num_workers)
+#         else:
+#             anchor_loader = DataLoader(dataset[split_idx["train"]], batch_size=args.batch_size, shuffle=True, num_workers = args.num_workers)
+#             positive_loader = DataLoader(dataset[split_idx["train"]], batch_size=args.batch_size, shuffle=True, num_workers = args.num_workers)
+#             negative_loader = DataLoader(dataset[split_idx["train"]], batch_size=args.batch_size, shuffle=True, num_workers = args.num_workers)
+#     elif args.train_subset:
+    if args.train_subset:
         subset_ratio = 0.1
         subset_idx = torch.randperm(len(split_idx["train"]))[:int(subset_ratio*len(split_idx["train"]))]
         train_loader = DataLoader(dataset[split_idx["train"][subset_idx]], batch_size=args.batch_size, shuffle=True, num_workers = args.num_workers)
@@ -208,7 +212,9 @@ def main():
     elif args.gnn == 'gcn-virtual':
         model = GNN(gnn_type = 'gcn', virtual_node = True, **shared_params).to(device)
     elif args.gnn == 'gin-virtual-bnn':
-        model = BayesianGNN(gnn_type = 'gin', virtual_node = True, **shared_params).to(device)
+        model = BayesianGNN(gnn_type = 'gin', virtual_node = True, last_layer_only=False, **shared_params).to(device)
+    elif args.gnn == 'gin-virtual-bnn-lastLayer':
+        model = BayesianGNN(gnn_type = 'gin', virtual_node = True, last_layer_only=True, **shared_params).to(device)
     else:
         raise ValueError('Invalid GNN type')
        
@@ -250,7 +256,7 @@ def main():
         print("=====Epoch {}".format(epoch))
         print('Training...')
         if args.use_triplet_loss:
-            train_mae = triplet_loss_train(model, device, anchor_loader, negative_loader, positive_loader, optimizer, args.gnn)
+            train_mae = triplet_loss_train(model, device, train_loader, dataset, optimizer, args.gnn, args)
         else:
             train_mae = train(model, device, train_loader, optimizer, args.gnn)
 
