@@ -77,6 +77,10 @@ DiffPool
 based on https://github.com/dmlc/dgl/tree/master/examples/pytorch/diffpool
 two hierarchical layers
 """
+from model.dgl_layers import GraphSage, GraphSageLayer, DiffPoolBatchedGraphLayer
+from model.tensorized_layers import BatchedGraphSAGE
+from model.model_utils import batch2tensor
+
 class DiffPoolGNN(GNN):
     def __init__(self, num_tasks = 1, num_layers = 5, emb_dim = 300, gnn_type = 'gin',
                  virtual_node = True, residual = False, drop_ratio = 0, JK = "last",
@@ -84,9 +88,24 @@ class DiffPoolGNN(GNN):
         super(DiffPoolGNN, self).__init__(num_tasks, num_layers, emb_dim, gnn_type,
                  virtual_node, residual, drop_ratio, JK, graph_pooling)
         
+        device = torch.device("cuda:" + str(args.device)) if torch.cuda.is_available() else torch.device("cpu")
+
+        
         # 2x number of outputs
         self.graph_pred_linear = nn.Linear(2*self.emb_dim, self.num_tasks)
 #         self.graph_pred_linear = nn.Linear(self.emb_dim, self.num_tasks)
+
+        self.first_diffpool_layer = DiffPoolBatchedGraphLayer(
+            input_dim=600, # graph embedding dimension
+            assign_dim=5, # group to 10
+            output_feat_dim=600,
+            activation=F.relu,
+            dropout=0.0,
+            aggregator_type="meanpool",
+            link_pred=False
+        ).to(device)
+
+        self.gc_after_pool = BatchedGraphSAGE(600, 600).to(device)
 
     def forward(self, g, x, edge_attr):
         # 1. GCN: 3628x9 -> 3628x600
@@ -99,7 +118,7 @@ class DiffPoolGNN(GNN):
 #         print(h_graph.shape)
         
         # 3. DiffPool: (1280x1280), (1280x600)
-        adj, h_node = first_diffpool_layer(g, h_node)
+        adj, h_node = self.first_diffpool_layer(g, h_node)
 #         print(adj.shape, h_node.shape)
         
         # 3b. split to batches
