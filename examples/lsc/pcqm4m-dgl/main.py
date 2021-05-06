@@ -12,7 +12,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import StepLR
 from tqdm import tqdm
 
-from gnn import GNN
+from gnn import GNN, DiffPoolGNN
 
 reg_criterion = torch.nn.L1Loss()
 
@@ -181,6 +181,8 @@ def main():
         model = GNN(gnn_type='gcn', virtual_node=False, **shared_params).to(device)
     elif args.gnn == 'gcn-virtual':
         model = GNN(gnn_type='gcn', virtual_node=True, **shared_params).to(device)
+    elif args.gnn == 'gin-virtual-diffpool':
+        model = DiffPoolGNN(gnn_type='gin', virtual_node=True, **shared_params).to(device)
     else:
         raise ValueError('Invalid GNN type')
         
@@ -196,7 +198,7 @@ def main():
     print(f'#Params: {num_params}')
 
     optimizer = optim.Adam(model.parameters(), lr=0.001)
-
+   
     if args.log_dir is not '':
         writer = SummaryWriter(log_dir=args.log_dir)
 
@@ -208,7 +210,24 @@ def main():
     else:
         scheduler = StepLR(optimizer, step_size=30, gamma=0.25)
 
-    for epoch in range(1, args.epochs + 1):
+    """ load from latest checkpoint """
+    # start epoch (default = 1, unless resuming training)
+    firstEpoch = 1
+    # check if checkpoint exist -> load model
+    checkpointFile = os.path.join(args.checkpoint_dir, 'checkpoint.pt')
+    if os.path.exists(checkpointFile):
+        # load checkpoint file
+        checkpointData = torch.load(checkpointFile)
+        firstEpoch = checkpointData["epoch"]
+        model.load_state_dict(checkpointData["model_state_dict"])
+        optimizer.load_state_dict(checkpointData["optimizer_state_dict"])
+        scheduler.load_state_dict(checkpointData["scheduler_state_dict"])
+        best_valid_mae = checkpointData["best_val_mae"]
+        num_params = checkpointData["num_params"]
+        print("Loaded existing weights from {}. Continuing from epoch: {} with best valid MAE: {}".format(checkpointFile, firstEpoch, best_valid_mae))
+
+        
+    for epoch in range(firstEpoch, args.epochs + 1):
         print("=====Epoch {}".format(epoch))
         print('Training...')
         train_mae = train(model, device, train_loader, optimizer)
