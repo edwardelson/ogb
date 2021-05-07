@@ -80,6 +80,8 @@ two hierarchical layers
 from model.dgl_layers import GraphSage, GraphSageLayer, DiffPoolBatchedGraphLayer
 from model.tensorized_layers import BatchedGraphSAGE
 from model.model_utils import batch2tensor
+from torch.nn import init
+import torch.nn.functional as F
 
 class DiffPoolGNN(GNN):
     def __init__(self, num_tasks = 1, num_layers = 5, emb_dim = 300, gnn_type = 'gin',
@@ -124,7 +126,7 @@ class DiffPoolGNN(GNN):
 #         print(adj.shape, h_node.shape)
 
         # 4. GCN:
-        h_node = self.gcn_forward_tensorized(h_node, adj, [gc_after_pool], True)
+        h_node = self.gcn_forward_tensorized(h_node, adj, [self.gc_after_pool], True)
 #         print(h_node.shape)
 
         # 5. Graph Pooling 256x600
