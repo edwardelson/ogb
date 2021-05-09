@@ -211,7 +211,7 @@ def main():
         # load checkpoint file
         checkpointData = torch.load(checkpointFile)
         firstEpoch = checkpointData["epoch"]
-        model.load_state_dict(checkpointData["model_state_dict"])
+        model.load_state_dict(checkpointData["model_state_dict"], strict=False)
         optimizer.load_state_dict(checkpointData["optimizer_state_dict"])
         scheduler.load_state_dict(checkpointData["scheduler_state_dict"])
         best_valid_mae = checkpointData["best_val_mae"]
