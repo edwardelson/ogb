@@ -94,6 +94,75 @@ def test(model, device, loader):
 
     return y_pred
 
+from ogb.lsc import DglPCQM4MDataset, PCQM4MEvaluator
+import os.path as osp
+from dgl.data.utils import load_graphs, save_graphs, Subset
+from ogb.utils import smiles2graph
+from ogb.utils.torch_util import replace_numpy_with_torchtensor
+from ogb.utils.url import decide_download, download_url, extract_zip
+class SampleDglPCQM4MDataset(DglPCQM4MDataset):
+    
+    @property
+    def raw_file_names(self):
+        return 'sample_data.csv.gz'
+
+    def prepare_graph(self):
+        processed_dir = osp.join(self.folder, 'processed')
+        raw_dir = osp.join(self.folder, 'raw')
+        pre_processed_file_path = osp.join(processed_dir, 'dgl_data_processed')
+
+        if osp.exists(pre_processed_file_path):        
+            # if pre-processed file already exists
+            self.graphs, label_dict = load_graphs(pre_processed_file_path)
+            self.labels = label_dict['labels']
+        else:
+            # if pre-processed file does not exist
+            
+            if not osp.exists(osp.join(raw_dir, 'sample_data.csv.gz')):
+                # if the raw file does not exist, then download it.
+                self.download()
+
+            data_df = pd.read_csv(osp.join(raw_dir, 'sample_data.csv.gz'))
+            smiles_list = data_df['smiles']
+            homolumogap_list = data_df['homolumogap']
+
+            print('Converting SMILES strings into graphs...')
+            self.graphs = []
+            self.labels = []
+            for i in tqdm(range(len(smiles_list))):
+
+                smiles = smiles_list[i]
+                homolumogap = homolumogap_list[i]
+                graph = self.smiles2graph(smiles)
+                
+                assert(len(graph['edge_feat']) == graph['edge_index'].shape[1])
+                assert(len(graph['node_feat']) == graph['num_nodes'])
+
+                dgl_graph = dgl.graph((graph['edge_index'][0], graph['edge_index'][1]), num_nodes = graph['num_nodes'])
+                dgl_graph.edata['feat'] = torch.from_numpy(graph['edge_feat']).to(torch.int64)
+                dgl_graph.ndata['feat'] = torch.from_numpy(graph['node_feat']).to(torch.int64)
+
+                self.graphs.append(dgl_graph)
+                self.labels.append(homolumogap)
+
+            self.labels = torch.tensor(self.labels, dtype=torch.float32)
+
+            # double-check prediction target
+            split_dict = self.get_idx_split()
+            assert(all([not torch.isnan(self.labels[i]) for i in split_dict['train']]))
+            assert(all([not torch.isnan(self.labels[i]) for i in split_dict['valid']]))
+            assert(all([torch.isnan(self.labels[i]) for i in split_dict['test']]))
+
+            print('Saving...')
+            save_graphs(pre_processed_file_path, self.graphs, labels={'labels': self.labels})
+        
+    
+    # just modify the get_idx_split function to call our new filename
+    def get_idx_split(self):
+        # NOTE: CHANGED split_dict.pt to sample_split_dict.pt
+        split_dict = replace_numpy_with_torchtensor(torch.load(osp.join(self.folder, 'sample_split_dict.pt')))
+        return split_dict
+
 
 def main():
     # Training settings
@@ -143,11 +212,14 @@ def main():
         device = torch.device("cpu")
 
     ### automatic dataloading and splitting
-    dataset = DglPCQM4MDataset(root='dataset/')
+    dataset = SampleDglPCQM4MDataset(root='dataset/')
 
     # split_idx['train'], split_idx['valid'], split_idx['test']
     # separately gives a 1D int64 tensor
     split_idx = dataset.get_idx_split()
+    split_idx["train"] = split_idx["train"].type(torch.LongTensor)
+    split_idx["test"] = split_idx["test"].type(torch.LongTensor)
+    split_idx["valid"] = split_idx["valid"].type(torch.LongTensor)
 
     ### automatic evaluator.
     evaluator = PCQM4MEvaluator()
@@ -218,7 +290,7 @@ def main():
         # load checkpoint file
         checkpointData = torch.load(checkpointFile)
         firstEpoch = checkpointData["epoch"]
-        model.load_state_dict(checkpointData["model_state_dict"], strict=False)
+        model.load_state_dict(checkpointData["model_state_dict"])
         optimizer.load_state_dict(checkpointData["optimizer_state_dict"])
         scheduler.load_state_dict(checkpointData["scheduler_state_dict"])
         best_valid_mae = checkpointData["best_val_mae"]

@@ -7,7 +7,7 @@ from scipy.linalg import block_diag
 import dgl.function as fn
 
 from .aggregator import MaxPoolAggregator, MeanAggregator, LSTMAggregator
-from .bundler import Bundler
+from .bundler import Bundler, BayesBundler
 from ..model_utils import masked_softmax
 from model.loss import EntropyLoss
 
@@ -47,7 +47,25 @@ class GraphSageLayer(nn.Module):
         h = g.ndata.pop('h')
         return h
 
+    
+import torchbnn as bnn
+import torch.optim as optim
+    
+class BayesGraphSageLayer(GraphSageLayer):
+    """
+    BayesGraphSage layer in Inductive learning paper by hamilton
+    Here, graphsage layer is a reduced function in DGL framework
+    """
 
+    def __init__(self, in_feats, out_feats, activation, dropout,
+                 aggregator_type, bn=False, bias=True):
+        super(BayesGraphSageLayer, self).__init__(in_feats, out_feats, activation, dropout,
+                 aggregator_type, bn, bias)
+        self.bundler = BayesBundler(in_feats, out_feats, activation, dropout,
+                               bias=bias)
+
+    
+    
 class GraphSage(nn.Module):
     """
     Grahpsage network that concatenate several graphsage layer
@@ -124,3 +142,25 @@ class DiffPoolBatchedGraphLayer(nn.Module):
             self.loss_log[loss_name] = loss_layer(adj, adj_new, assign_tensor)
 
         return adj_new, h
+
+class BayesDiffPoolBatchedGraphLayer(DiffPoolBatchedGraphLayer):
+
+    def __init__(self, input_dim, assign_dim, output_feat_dim,
+                 activation, dropout, aggregator_type, link_pred):
+        super(BayesDiffPoolBatchedGraphLayer, self).__init__(input_dim, assign_dim, output_feat_dim,
+                 activation, dropout, aggregator_type, link_pred)
+        
+        self.feat_gc = BayesGraphSageLayer(
+            input_dim,
+            output_feat_dim,
+            activation,
+            dropout,
+            aggregator_type)
+
+        self.pool_gc = BayesGraphSageLayer(
+            input_dim,
+            assign_dim,
+            activation,
+            dropout,
+            aggregator_type)
+        

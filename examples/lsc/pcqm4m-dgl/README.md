@@ -32,6 +32,12 @@ python main.py --gnn gin --log_dir $LOG_DIR --checkpoint_dir $CHECKPOINT_DIR --s
 python main.py --gnn gin-virtual --log_dir $LOG_DIR --checkpoint_dir $CHECKPOINT_DIR --save_test_dir $TEST_DIR
 ```
 
+### GIN-bayes-virtual [1,3]
+
+```
+python main-sample.py --gnn gin-virtual-bayes-diffpool --log_dir models/gin-virtual-bayes-diffpool/log --checkpoint_dir models/gin-virtual-bayes-diffpool/checkpoint --save_test_dir models/gin-virtual-bayes-diffpool/test
+```
+
 ### GCN [2]
 
 ```
