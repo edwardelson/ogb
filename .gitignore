@@ -25,3 +25,4 @@ dataset/
 **/checkpoint
 **/events.out.*
 **/test*
+**/.ipynb_checkpoints

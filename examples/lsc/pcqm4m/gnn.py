@@ -71,13 +71,16 @@ import torch.optim as optim
 
 class BayesianGNN(GNN):
     def __init__(self, num_tasks = 1, num_layers = 5, emb_dim = 300, 
-                    gnn_type = 'gin', virtual_node = True, residual = False, drop_ratio = 0, JK = "last", graph_pooling = "sum"):
+                    gnn_type = 'gin', virtual_node = True, residual = False, drop_ratio = 0, JK = "last", graph_pooling = "sum", last_layer_only=True):
         super(BayesianGNN, self).__init__(num_tasks, num_layers, emb_dim, 
                     gnn_type, virtual_node, residual, drop_ratio, JK, graph_pooling)
         
         ### GNN to generate node embeddings
-        if virtual_node:
+        if virtual_node & (not last_layer_only):
             self.gnn_node = Bayesian_GNN_node_Virtualnode(num_layers, emb_dim, JK = JK, drop_ratio = drop_ratio, residual = residual, gnn_type = gnn_type)
+        # only last layer is replaced with Bayesian neural network
+        elif virtual_node & last_layer_only:
+            self.gnn_node = GNN_node_Virtualnode(num_layers, emb_dim, JK = JK, drop_ratio = drop_ratio, residual = residual, gnn_type = gnn_type)
         else:
             raise Exception("not implemented")
 

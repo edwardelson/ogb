@@ -2,6 +2,8 @@ import torch
 from torch import nn as nn
 from torch.nn import functional as F
 
+import torchbnn as bnn
+import torch.optim as optim
 
 class BatchedGraphSAGE(nn.Module):
     def __init__(self, infeat, outfeat, use_bn=True,
@@ -40,3 +42,10 @@ class BatchedGraphSAGE(nn.Module):
             return 'BN' + super(BatchedGraphSAGE, self).__repr__()
         else:
             return super(BatchedGraphSAGE, self).__repr__()
+
+class BayesBatchedGraphSAGE(BatchedGraphSAGE):
+    def __init__(self, infeat, outfeat, use_bn=True,
+                 mean=False, add_self=False):
+        super().__init__(infeat, outfeat, use_bn,
+                 mean, add_self)
+        self.W = bnn.BayesLinear(prior_mu=0, prior_sigma=0.1, in_features=infeat, out_features=outfeat)

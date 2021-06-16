@@ -1,10 +1,8 @@
-### importing OGB-LSC
 from ogb.lsc import PygPCQM4MDataset, PCQM4MEvaluator
 
 import torch
 from torch_geometric.data import DataLoader
 import torch.optim as optim
-import torch.nn.functional as F
 from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import StepLR
 
@@ -13,13 +11,57 @@ from gnn import GNN, BayesianGNN
 import os
 from tqdm import tqdm
 import argparse
-import time
 import numpy as np
 import random
 
-
+from loss_functions.TripletLossRegression import TripletLossRegression, createTripletLoader
 
 reg_criterion = torch.nn.L1Loss()
+model_activation = {}
+def get_activation(name):
+    def hook(model, input, output):
+        model_activation[name] = output
+    return hook
+
+def triplet_loss_train(model, device, train_loader, dataset, optimizer, gnn_name, args):
+    model.eval()
+    anchor_loader, positive_loader, negative_loader = createTripletLoader(device, model, train_loader, dataset, args, errorThres=5)
+    
+    model.train()
+    loss_accum = 0
+    triplet_loss_criterion = TripletLossRegression()
+
+    for step, (anchor_batch, negative_batch, positive_batch) in \
+            enumerate(zip(tqdm(anchor_loader, desc="Iteration"), negative_loader, positive_loader)):
+        anchor_batch = anchor_batch.to(device)
+        pred_anchor = model(anchor_batch).view(-1,)
+        anchor_embed = model_activation['gnn_node']
+
+        negative_batch = negative_batch.to(device)
+        pred_neg = model(negative_batch).view(-1,)
+        neg_embed = model_activation['gnn_node']
+
+        positive_batch = positive_batch.to(device)
+        pred_pos= model(positive_batch).view(-1,)
+        pos_embed = model_activation['gnn_node']
+
+        optimizer.zero_grad()
+        mae_loss = reg_criterion(pred_anchor, anchor_batch.y)
+        tll_loss = triplet_loss_criterion(anchor_batch.batch, negative_batch.batch, positive_batch.batch,
+                                          anchor_embed, neg_embed, pos_embed,
+                                          anchor_batch.y, negative_batch.y, positive_batch.y)
+        loss = mae_loss + tll_loss
+
+        if gnn_name == 'gin-virtual-bnn':
+            kl_loss = model.get_kl_loss()[0]
+            loss += kl_loss
+
+        loss.backward()
+        optimizer.step()
+
+        loss_accum += loss.detach().cpu().item()
+
+    return loss_accum / (step + 1)
 
 def train(model, device, loader, optimizer, gnn_name):
     model.train()
@@ -105,6 +147,7 @@ def main():
                         help='number of workers (default: 0)')
     parser.add_argument('--log_dir', type=str, default="",
                         help='tensorboard log directory')
+    parser.add_argument('--use_triplet_loss', action='store_true')
     parser.add_argument('--checkpoint_dir', type=str, default = '', help='directory to save checkpoint')
     parser.add_argument('--save_test_dir', type=str, default = '', help='directory to save test submission file')
     args = parser.parse_args()
@@ -126,6 +169,18 @@ def main():
     ### automatic evaluator. takes dataset name as input
     evaluator = PCQM4MEvaluator()
 
+#     if args.use_triplet_loss:
+#         if args.train_subset:
+#             subset_ratio = 0.1
+#             subset_idx = torch.randperm(len(split_idx["train"]))[:int(subset_ratio*len(split_idx["train"]))]
+#             anchor_loader = DataLoader(dataset[split_idx["train"][subset_idx]], batch_size=args.batch_size, shuffle=True, num_workers = args.num_workers)
+#             positive_loader = DataLoader(dataset[split_idx["train"][subset_idx]], batch_size=args.batch_size, shuffle=True, num_workers = args.num_workers)
+#             negative_loader = DataLoader(dataset[split_idx["train"][subset_idx]], batch_size=args.batch_size, shuffle=True, num_workers = args.num_workers)
+#         else:
+#             anchor_loader = DataLoader(dataset[split_idx["train"]], batch_size=args.batch_size, shuffle=True, num_workers = args.num_workers)
+#             positive_loader = DataLoader(dataset[split_idx["train"]], batch_size=args.batch_size, shuffle=True, num_workers = args.num_workers)
+#             negative_loader = DataLoader(dataset[split_idx["train"]], batch_size=args.batch_size, shuffle=True, num_workers = args.num_workers)
+#     elif args.train_subset:
     if args.train_subset:
         subset_ratio = 0.1
         subset_idx = torch.randperm(len(split_idx["train"]))[:int(subset_ratio*len(split_idx["train"]))]
@@ -157,7 +212,9 @@ def main():
     elif args.gnn == 'gcn-virtual':
         model = GNN(gnn_type = 'gcn', virtual_node = True, **shared_params).to(device)
     elif args.gnn == 'gin-virtual-bnn':
-        model = BayesianGNN(gnn_type = 'gin', virtual_node = True, **shared_params).to(device)
+        model = BayesianGNN(gnn_type = 'gin', virtual_node = True, last_layer_only=False, **shared_params).to(device)
+    elif args.gnn == 'gin-virtual-bnn-lastLayer':
+        model = BayesianGNN(gnn_type = 'gin', virtual_node = True, last_layer_only=True, **shared_params).to(device)
     else:
         raise ValueError('Invalid GNN type')
        
@@ -183,20 +240,25 @@ def main():
     checkpointFile = os.path.join(args.checkpoint_dir, 'checkpoint.pt')
     if os.path.exists(checkpointFile):
         # load checkpoint file
-        print("Loading existing weights from {}".format(checkpointFile))
         checkpointData = torch.load(checkpointFile)
         firstEpoch = checkpointData["epoch"]
         model.load_state_dict(checkpointData["model_state_dict"])
         optimizer.load_state_dict(checkpointData["optimizer_state_dict"])
         scheduler.load_state_dict(checkpointData["scheduler_state_dict"])
-        best_valid_mae = checkpointData["best_valid_mae"]
+        best_valid_mae = checkpointData["best_val_mae"]
         num_params = checkpointData["num_params"]
+        print("Loaded existing weights from {}. Continuing from epoch: {} with best valid MAE: {}".format(checkpointFile, firstEpoch, best_valid_mae))
 
+    if args.use_triplet_loss:
+        model.gnn_node.register_forward_hook(get_activation('gnn_node'))
 
     for epoch in range(firstEpoch, args.epochs + 1):
         print("=====Epoch {}".format(epoch))
         print('Training...')
-        train_mae = train(model, device, train_loader, optimizer, args.gnn)
+        if args.use_triplet_loss:
+            train_mae = triplet_loss_train(model, device, train_loader, dataset, optimizer, args.gnn, args)
+        else:
+            train_mae = train(model, device, train_loader, optimizer, args.gnn)
 
         print('Evaluating...')
         valid_mae = eval(model, device, valid_loader, evaluator)

@@ -1,2 +1,2 @@
 from .diffpool import BatchedDiffPool
-from .graphsage import BatchedGraphSAGE
+from .graphsage import BatchedGraphSAGE, BayesBatchedGraphSAGE
